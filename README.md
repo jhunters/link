@@ -64,7 +64,8 @@ func main() {
 	serverJson.Register(AddReq{})
 	serverJson.Register(AddRsp{})
 
-	server, err := link.Listen[AddRsp, AddReq]("tcp", "0.0.0.0:0", serverJson, 0 /* sync send */, link.HandlerFunc[AddRsp, AddReq](serverSessionLoop))
+	server, err := link.Listen[AddRsp, AddReq]("tcp", "0.0.0.0:0",
+		serverJson, 0 /* sync send */, link.HandlerFunc[AddRsp, AddReq](serverSessionLoop))
 	checkErr(err)
 	addr := server.Listener().Addr().String()
 	go server.Serve()
