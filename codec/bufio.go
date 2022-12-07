@@ -4,25 +4,25 @@ import (
 	"bufio"
 	"io"
 
-	"github.com/funny/link"
+	"github.com/jhunters/link"
 )
 
-func Bufio(base link.Protocol, readBuf, writeBuf int) link.Protocol {
-	return &bufioProtocol{
+func Bufio[S, R any](base link.Protocol[S, R], readBuf, writeBuf int) link.Protocol[S, R] {
+	return &bufioProtocol[S, R]{
 		base:     base,
 		readBuf:  readBuf,
 		writeBuf: writeBuf,
 	}
 }
 
-type bufioProtocol struct {
-	base     link.Protocol
+type bufioProtocol[S, R any] struct {
+	base     link.Protocol[S, R]
 	readBuf  int
 	writeBuf int
 }
 
-func (b *bufioProtocol) NewCodec(rw io.ReadWriter) (cc link.Codec, err error) {
-	codec := new(bufioCodec)
+func (b *bufioProtocol[S, R]) NewCodec(rw io.ReadWriter) (cc link.Codec[S, R], err error) {
+	codec := new(bufioCodec[S, R])
 
 	if b.writeBuf > 0 {
 		codec.stream.w = bufio.NewWriterSize(rw, b.writeBuf)
@@ -68,23 +68,23 @@ func (s *bufioStream) close() error {
 	return nil
 }
 
-type bufioCodec struct {
-	base   link.Codec
+type bufioCodec[S, R any] struct {
+	base   link.Codec[S, R]
 	stream bufioStream
 }
 
-func (c *bufioCodec) Send(msg interface{}) error {
+func (c *bufioCodec[S, R]) Send(msg S) error {
 	if err := c.base.Send(msg); err != nil {
 		return err
 	}
 	return c.stream.Flush()
 }
 
-func (c *bufioCodec) Receive() (interface{}, error) {
+func (c *bufioCodec[S, R]) Receive() (R, error) {
 	return c.base.Receive()
 }
 
-func (c *bufioCodec) Close() error {
+func (c *bufioCodec[S, R]) Close() error {
 	err1 := c.base.Close()
 	err2 := c.stream.close()
 	if err1 != nil {

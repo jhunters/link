@@ -6,27 +6,27 @@ import (
 
 type KEY interface{}
 
-type Channel struct {
+type Channel[S, R any] struct {
 	mutex    sync.RWMutex
-	sessions map[KEY]*Session
+	sessions map[KEY]*Session[S, R]
 
 	// channel state
 	State interface{}
 }
 
-func NewChannel() *Channel {
-	return &Channel{
-		sessions: make(map[KEY]*Session),
+func NewChannel[S, R any]() *Channel[S, R] {
+	return &Channel[S, R]{
+		sessions: make(map[KEY]*Session[S, R]),
 	}
 }
 
-func (channel *Channel) Len() int {
+func (channel *Channel[S, R]) Len() int {
 	channel.mutex.RLock()
 	defer channel.mutex.RUnlock()
 	return len(channel.sessions)
 }
 
-func (channel *Channel) Fetch(callback func(*Session)) {
+func (channel *Channel[S, R]) Fetch(callback func(*Session[S, R])) {
 	channel.mutex.RLock()
 	defer channel.mutex.RUnlock()
 	for _, session := range channel.sessions {
@@ -34,14 +34,14 @@ func (channel *Channel) Fetch(callback func(*Session)) {
 	}
 }
 
-func (channel *Channel) Get(key KEY) *Session {
+func (channel *Channel[S, R]) Get(key KEY) *Session[S, R] {
 	channel.mutex.RLock()
 	defer channel.mutex.RUnlock()
 	session, _ := channel.sessions[key]
 	return session
 }
 
-func (channel *Channel) Put(key KEY, session *Session) {
+func (channel *Channel[S, R]) Put(key KEY, session *Session[S, R]) {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 	if session, exists := channel.sessions[key]; exists {
@@ -53,12 +53,12 @@ func (channel *Channel) Put(key KEY, session *Session) {
 	channel.sessions[key] = session
 }
 
-func (channel *Channel) remove(key KEY, session *Session) {
+func (channel *Channel[S, R]) remove(key KEY, session *Session[S, R]) {
 	session.RemoveCloseCallback(channel, key)
 	delete(channel.sessions, key)
 }
 
-func (channel *Channel) Remove(key KEY) bool {
+func (channel *Channel[S, R]) Remove(key KEY) bool {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 	session, exists := channel.sessions[key]
@@ -68,7 +68,7 @@ func (channel *Channel) Remove(key KEY) bool {
 	return exists
 }
 
-func (channel *Channel) FetchAndRemove(callback func(*Session)) {
+func (channel *Channel[S, R]) FetchAndRemove(callback func(*Session[S, R])) {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 	for key, session := range channel.sessions {
@@ -78,7 +78,7 @@ func (channel *Channel) FetchAndRemove(callback func(*Session)) {
 	}
 }
 
-func (channel *Channel) Close() {
+func (channel *Channel[S, R]) Close() {
 	channel.mutex.Lock()
 	defer channel.mutex.Unlock()
 	for key, session := range channel.sessions {

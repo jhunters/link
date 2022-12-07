@@ -2,29 +2,27 @@ package link
 
 import "net"
 
-type Server struct {
-	manager      *Manager
+type Server[S, R any] struct {
+	manager      *Manager[S, R]
 	listener     net.Listener
-	protocol     Protocol
-	handler      Handler
+	protocol     Protocol[S, R]
+	handler      HandlerFunc[S, R]
 	sendChanSize int
 }
 
-type Handler interface {
-	HandleSession(*Session)
+type Handler[S, R any] interface {
+	HandleSession(*Session[S, R])
 }
 
-var _ Handler = HandlerFunc(nil)
+type HandlerFunc[S, R any] func(*Session[S, R])
 
-type HandlerFunc func(*Session)
-
-func (f HandlerFunc) HandleSession(session *Session) {
+func (f HandlerFunc[S, R]) HandleSession(session *Session[S, R]) {
 	f(session)
 }
 
-func NewServer(listener net.Listener, protocol Protocol, sendChanSize int, handler Handler) *Server {
-	return &Server{
-		manager:      NewManager(),
+func NewServer[S, R any](listener net.Listener, protocol Protocol[S, R], sendChanSize int, handler HandlerFunc[S, R]) *Server[S, R] {
+	return &Server[S, R]{
+		manager:      NewManager[S, R](),
 		listener:     listener,
 		protocol:     protocol,
 		handler:      handler,
@@ -32,11 +30,11 @@ func NewServer(listener net.Listener, protocol Protocol, sendChanSize int, handl
 	}
 }
 
-func (server *Server) Listener() net.Listener {
+func (server *Server[S, R]) Listener() net.Listener {
 	return server.listener
 }
 
-func (server *Server) Serve() error {
+func (server *Server[S, R]) Serve() error {
 	for {
 		conn, err := Accept(server.listener)
 		if err != nil {
@@ -55,11 +53,11 @@ func (server *Server) Serve() error {
 	}
 }
 
-func (server *Server) GetSession(sessionID uint64) *Session {
+func (server *Server[S, R]) GetSession(sessionID uint64) *Session[S, R] {
 	return server.manager.GetSession(sessionID)
 }
 
-func (server *Server) Stop() {
+func (server *Server[S, R]) Stop() {
 	server.listener.Close()
 	server.manager.Dispose()
 }

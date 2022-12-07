@@ -4,27 +4,27 @@ import "sync"
 
 const sessionMapNum = 32
 
-type Manager struct {
-	sessionMaps [sessionMapNum]sessionMap
+type Manager[S, R any] struct {
+	sessionMaps [sessionMapNum]sessionMap[S, R]
 	disposeOnce sync.Once
 	disposeWait sync.WaitGroup
 }
 
-type sessionMap struct {
+type sessionMap[S, R any] struct {
 	sync.RWMutex
-	sessions map[uint64]*Session
+	sessions map[uint64]*Session[S, R]
 	disposed bool
 }
 
-func NewManager() *Manager {
-	manager := &Manager{}
+func NewManager[S, R any]() *Manager[S, R] {
+	manager := &Manager[S, R]{}
 	for i := 0; i < len(manager.sessionMaps); i++ {
-		manager.sessionMaps[i].sessions = make(map[uint64]*Session)
+		manager.sessionMaps[i].sessions = make(map[uint64]*Session[S, R])
 	}
 	return manager
 }
 
-func (manager *Manager) Dispose() {
+func (manager *Manager[S, R]) Dispose() {
 	manager.disposeOnce.Do(func() {
 		for i := 0; i < sessionMapNum; i++ {
 			smap := &manager.sessionMaps[i]
@@ -39,13 +39,13 @@ func (manager *Manager) Dispose() {
 	})
 }
 
-func (manager *Manager) NewSession(codec Codec, sendChanSize int) *Session {
+func (manager *Manager[S, R]) NewSession(codec Codec[S, R], sendChanSize int) *Session[S, R] {
 	session := newSession(manager, codec, sendChanSize)
 	manager.putSession(session)
 	return session
 }
 
-func (manager *Manager) GetSession(sessionID uint64) *Session {
+func (manager *Manager[S, R]) GetSession(sessionID uint64) *Session[S, R] {
 	smap := &manager.sessionMaps[sessionID%sessionMapNum]
 	smap.RLock()
 	defer smap.RUnlock()
@@ -54,7 +54,7 @@ func (manager *Manager) GetSession(sessionID uint64) *Session {
 	return session
 }
 
-func (manager *Manager) putSession(session *Session) {
+func (manager *Manager[S, R]) putSession(session *Session[S, R]) {
 	smap := &manager.sessionMaps[session.id%sessionMapNum]
 
 	smap.Lock()
@@ -69,7 +69,7 @@ func (manager *Manager) putSession(session *Session) {
 	manager.disposeWait.Add(1)
 }
 
-func (manager *Manager) delSession(session *Session) {
+func (manager *Manager[S, R]) delSession(session *Session[S, R]) {
 	smap := &manager.sessionMaps[session.id%sessionMapNum]
 
 	smap.Lock()

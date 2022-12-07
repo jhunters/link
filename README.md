@@ -29,6 +29,11 @@ link包的核心是`Session`，`Session`的字面含义是`会话`，就是一�
 
 link还提供了`Channel`用于对`Session`进行按需分组，`Channel`用key-value的形式管理`Session`，`Channel`的key类型通过代码生成的形式来实现自定义。
 
+修改历史：
+=======
+
+* 增加泛型支撑
+
 示例
 =======
 
@@ -41,10 +46,9 @@ package main
 
 import (
 	"log"
-	"net"
 
-	"github.com/funny/link"
-	"github.com/funny/link/codec"
+	"github.com/jhunters/link"
+	"github.com/jhunters/link/codec"
 )
 
 type AddReq struct {
@@ -55,39 +59,40 @@ type AddRsp struct {
 	C int
 }
 
-type Server struct{}
-
 func main() {
-	json := codec.Json()
+	serverJson := codec.Json[AddRsp, AddReq]()
+	serverJson.Register(AddReq{})
+	serverJson.Register(AddRsp{})
+
+	server, err := link.Listen[AddRsp, AddReq]("tcp", "0.0.0.0:0", serverJson, 0 /* sync send */, link.HandlerFunc[AddRsp, AddReq](serverSessionLoop))
+	checkErr(err)
+	addr := server.Listener().Addr().String()
+	go server.Serve()
+
+	json := codec.Json[AddReq, AddRsp]()
 	json.Register(AddReq{})
 	json.Register(AddRsp{})
 
-	listen, err := net.Listen("tcp", "")
+	client, err := link.Dial[AddReq, AddRsp]("tcp", addr, json, 0)
 	checkErr(err)
-	server := link.NewServer(listen, json, 1024, new(Server))
-	go server.Serve()
-	addr := server.Listener().Addr()
-
-	clientSession, err := link.Dial(addr.Network(), addr.String(), json, 1024)
-	checkErr(err)
-	clientSessionLoop(clientSession)
+	clientSessionLoop(client)
 }
 
-func (*Server) HandleSession(session *link.Session) {
+func serverSessionLoop(session *link.Session[AddRsp, AddReq]) {
 	for {
 		req, err := session.Receive()
 		checkErr(err)
 
-		err = session.Send(&AddRsp{
-			req.(*AddReq).A + req.(*AddReq).B,
+		err = session.Send(AddRsp{
+			req.A + req.B,
 		})
 		checkErr(err)
 	}
 }
 
-func clientSessionLoop(session *link.Session) {
+func clientSessionLoop(session *link.Session[AddReq, AddRsp]) {
 	for i := 0; i < 10; i++ {
-		err := session.Send(&AddReq{
+		err := session.Send(AddReq{
 			i, i,
 		})
 		checkErr(err)
@@ -95,7 +100,7 @@ func clientSessionLoop(session *link.Session) {
 
 		rsp, err := session.Receive()
 		checkErr(err)
-		log.Printf("Receive: %d", rsp.(*AddRsp).C)
+		log.Printf("Receive: %d", rsp.C)
 	}
 }
 
@@ -104,6 +109,7 @@ func checkErr(err error) {
 		log.Fatal(err)
 	}
 }
+
 
 ```
 

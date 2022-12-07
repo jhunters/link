@@ -7,13 +7,13 @@ import (
 	"io"
 	"math"
 
-	"github.com/funny/link"
+	"github.com/jhunters/link"
 )
 
 var ErrTooLargePacket = errors.New("Too Large Packet")
 
-type FixLenProtocol struct {
-	base        link.Protocol
+type FixLenProtocol[S, R any] struct {
+	base        link.Protocol[S, R]
 	n           int
 	maxRecv     int
 	maxSend     int
@@ -21,8 +21,8 @@ type FixLenProtocol struct {
 	headEncoder func([]byte, int)
 }
 
-func FixLen(base link.Protocol, n int, byteOrder binary.ByteOrder, maxRecv, maxSend int) *FixLenProtocol {
-	proto := &FixLenProtocol{
+func FixLen[S, R any](base link.Protocol[S, R], n int, byteOrder binary.ByteOrder, maxRecv, maxSend int) *FixLenProtocol[S, R] {
+	proto := &FixLenProtocol[S, R]{
 		n:    n,
 		base: base,
 	}
@@ -81,8 +81,8 @@ func FixLen(base link.Protocol, n int, byteOrder binary.ByteOrder, maxRecv, maxS
 	return proto
 }
 
-func (p *FixLenProtocol) NewCodec(rw io.ReadWriter) (cc link.Codec, err error) {
-	codec := &fixlenCodec{
+func (p *FixLenProtocol[S, R]) NewCodec(rw io.ReadWriter) (cc link.Codec[S, R], err error) {
+	codec := &fixlenCodec[S, R]{
 		rw:             rw,
 		FixLenProtocol: p,
 	}
@@ -109,37 +109,38 @@ func (rw *fixlenReadWriter) Write(p []byte) (int, error) {
 	return rw.sendBuf.Write(p)
 }
 
-type fixlenCodec struct {
-	base    link.Codec
+type fixlenCodec[S, R any] struct {
+	base    link.Codec[S, R]
 	head    [8]byte
 	headBuf []byte
 	bodyBuf []byte
 	rw      io.ReadWriter
-	*FixLenProtocol
+	*FixLenProtocol[S, R]
 	fixlenReadWriter
 }
 
-func (c *fixlenCodec) Receive() (interface{}, error) {
+func (c *fixlenCodec[S, R]) Receive() (R, error) {
+	var body R
 	if _, err := io.ReadFull(c.rw, c.headBuf); err != nil {
-		return nil, err
+		return body, err
 	}
 	size := c.headDecoder(c.headBuf)
 	if size > c.maxRecv {
-		return nil, ErrTooLargePacket
+		return body, ErrTooLargePacket
 	}
 	if cap(c.bodyBuf) < size {
 		c.bodyBuf = make([]byte, size, size+128)
 	}
 	buff := c.bodyBuf[:size]
 	if _, err := io.ReadFull(c.rw, buff); err != nil {
-		return nil, err
+		return body, err
 	}
 	c.recvBuf.Reset(buff)
 	msg, err := c.base.Receive()
 	return msg, err
 }
 
-func (c *fixlenCodec) Send(msg interface{}) error {
+func (c *fixlenCodec[S, R]) Send(msg S) error {
 	c.sendBuf.Reset()
 	c.sendBuf.Write(c.headBuf)
 	err := c.base.Send(msg)
@@ -152,7 +153,7 @@ func (c *fixlenCodec) Send(msg interface{}) error {
 	return err
 }
 
-func (c *fixlenCodec) Close() error {
+func (c *fixlenCodec[S, R]) Close() error {
 	if closer, ok := c.rw.(io.Closer); ok {
 		return closer.Close()
 	}

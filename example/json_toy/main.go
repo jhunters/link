@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/funny/link"
-	"github.com/funny/link/codec"
+	"github.com/jhunters/link"
+	"github.com/jhunters/link/codec"
 )
 
 type AddReq struct {
@@ -16,35 +16,39 @@ type AddRsp struct {
 }
 
 func main() {
-	json := codec.Json()
-	json.Register(AddReq{})
-	json.Register(AddRsp{})
+	serverJson := codec.Json[AddRsp, AddReq]()
+	serverJson.Register(AddReq{})
+	serverJson.Register(AddRsp{})
 
-	server, err := link.Listen("tcp", "0.0.0.0:0", json, 0 /* sync send */, link.HandlerFunc(serverSessionLoop))
+	server, err := link.Listen[AddRsp, AddReq]("tcp", "0.0.0.0:0", serverJson, 0 /* sync send */, link.HandlerFunc[AddRsp, AddReq](serverSessionLoop))
 	checkErr(err)
 	addr := server.Listener().Addr().String()
 	go server.Serve()
 
-	client, err := link.Dial("tcp", addr, json, 0)
+	json := codec.Json[AddReq, AddRsp]()
+	json.Register(AddReq{})
+	json.Register(AddRsp{})
+
+	client, err := link.Dial[AddReq, AddRsp]("tcp", addr, json, 0)
 	checkErr(err)
 	clientSessionLoop(client)
 }
 
-func serverSessionLoop(session *link.Session) {
+func serverSessionLoop(session *link.Session[AddRsp, AddReq]) {
 	for {
 		req, err := session.Receive()
 		checkErr(err)
 
-		err = session.Send(&AddRsp{
-			req.(*AddReq).A + req.(*AddReq).B,
+		err = session.Send(AddRsp{
+			req.A + req.B,
 		})
 		checkErr(err)
 	}
 }
 
-func clientSessionLoop(session *link.Session) {
+func clientSessionLoop(session *link.Session[AddReq, AddRsp]) {
 	for i := 0; i < 10; i++ {
-		err := session.Send(&AddReq{
+		err := session.Send(AddReq{
 			i, i,
 		})
 		checkErr(err)
@@ -52,7 +56,7 @@ func clientSessionLoop(session *link.Session) {
 
 		rsp, err := session.Receive()
 		checkErr(err)
-		log.Printf("Receive: %d", rsp.(*AddRsp).C)
+		log.Printf("Receive: %d", rsp.C)
 	}
 }
 

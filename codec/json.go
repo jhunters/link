@@ -5,22 +5,22 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/funny/link"
+	"github.com/jhunters/link"
 )
 
-type JsonProtocol struct {
+type JsonProtocol[S, R any] struct {
 	types map[string]reflect.Type
 	names map[reflect.Type]string
 }
 
-func Json() *JsonProtocol {
-	return &JsonProtocol{
+func Json[S, R any]() *JsonProtocol[S, R] {
+	return &JsonProtocol[S, R]{
 		types: make(map[string]reflect.Type),
 		names: make(map[reflect.Type]string),
 	}
 }
 
-func (j *JsonProtocol) Register(t interface{}) {
+func (j *JsonProtocol[S, R]) Register(t interface{}) {
 	rt := reflect.TypeOf(t)
 	if rt.Kind() == reflect.Ptr {
 		rt = rt.Elem()
@@ -30,7 +30,7 @@ func (j *JsonProtocol) Register(t interface{}) {
 	j.names[rt] = name
 }
 
-func (j *JsonProtocol) RegisterName(name string, t interface{}) {
+func (j *JsonProtocol[S, R]) RegisterName(name string, t interface{}) {
 	rt := reflect.TypeOf(t)
 	if rt.Kind() == reflect.Ptr {
 		rt = rt.Elem()
@@ -39,8 +39,8 @@ func (j *JsonProtocol) RegisterName(name string, t interface{}) {
 	j.names[rt] = name
 }
 
-func (j *JsonProtocol) NewCodec(rw io.ReadWriter) (link.Codec, error) {
-	codec := &jsonCodec{
+func (j *JsonProtocol[S, R]) NewCodec(rw io.ReadWriter) (link.Codec[S, R], error) {
+	codec := &jsonCodec[S, R]{
 		p:       j,
 		encoder: json.NewEncoder(rw),
 		decoder: json.NewDecoder(rw),
@@ -59,33 +59,34 @@ type jsonOut struct {
 	Body interface{}
 }
 
-type jsonCodec struct {
-	p       *JsonProtocol
+type jsonCodec[S, R any] struct {
+	p       *JsonProtocol[S, R]
 	closer  io.Closer
 	encoder *json.Encoder
 	decoder *json.Decoder
 }
 
-func (c *jsonCodec) Receive() (interface{}, error) {
+func (c *jsonCodec[S, R]) Receive() (R, error) {
 	var in jsonIn
 	err := c.decoder.Decode(&in)
+	var body R
 	if err != nil {
-		return nil, err
+		return body, err
 	}
-	var body interface{}
 	if in.Head != "" {
 		if t, exists := c.p.types[in.Head]; exists {
-			body = reflect.New(t).Interface()
+			v := reflect.New(t).Interface().(*R)
+			body = *v
 		}
 	}
 	err = json.Unmarshal(*in.Body, &body)
 	if err != nil {
-		return nil, err
+		return body, err
 	}
 	return body, nil
 }
 
-func (c *jsonCodec) Send(msg interface{}) error {
+func (c *jsonCodec[S, R]) Send(msg S) error {
 	var out jsonOut
 	t := reflect.TypeOf(msg)
 	if t.Kind() == reflect.Ptr {
@@ -98,7 +99,7 @@ func (c *jsonCodec) Send(msg interface{}) error {
 	return c.encoder.Encode(&out)
 }
 
-func (c *jsonCodec) Close() error {
+func (c *jsonCodec[S, R]) Close() error {
 	if c.closer != nil {
 		return c.closer.Close()
 	}
